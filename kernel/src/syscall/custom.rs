@@ -56,4 +56,8 @@ impl Syscall<'_> {
         }
         Ok(0)
     }
+
+    pub fn sys_register_kprobe(&mut self, addr: usize) -> SysResult {
+        Ok(0)
+    }
 }

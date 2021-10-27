@@ -282,3 +282,4 @@ pub const SYS_IO_PGETEVENTS: usize = 292;
 // custom temporary syscall
 pub const SYS_MAP_PCI_DEVICE: usize = 999;
 pub const SYS_GET_PADDR: usize = 998;
+pub const SYS_REGISTER_KPROBE: usize = 997;
