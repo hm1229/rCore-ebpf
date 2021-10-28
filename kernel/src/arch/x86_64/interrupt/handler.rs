@@ -114,6 +114,11 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
                 debug!("{}", dyn_fmt::Arguments::new(core::str::from_utf8_unchecked(fmt), &[p1, p2, p3]));
                 0
             };
+            helpers[1] = |mem, mem_size, _, _, _| unsafe {
+                let mem = core::slice::from_raw_parts(mem as *const u8, mem_size as usize);
+                debug!("{:?}", mem);
+                0
+            };
             let ret = ebpf_rs::interpret::interpret(&prog.chunks_exact(8).map(|x| {
                 u64::from_le_bytes({
                     let mut buf: [u8; 8] = Default::default();

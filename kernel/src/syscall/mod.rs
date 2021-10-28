@@ -67,6 +67,27 @@ pub async fn handle_syscall(thread: &Arc<Thread>, context: &mut UserContext) -> 
         context.epc = context.epc + 4;
     }
 
+    // begin kprobe hook
+    #[repr(C)]
+    struct kprobe_context {
+        num: usize,
+        args: [usize; 6],
+    }
+
+    let kctx = kprobe_context {
+        num,
+        args,
+    };
+    unsafe {
+        asm!(
+            "mov r10, {0}",
+            "int3",
+            in(reg) &kctx as *const kprobe_context as usize,
+            out("r10") _,
+        );
+    }
+    // end kprobe hook
+
     let mut syscall = Syscall {
         thread,
         context,
