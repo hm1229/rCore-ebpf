@@ -231,6 +231,7 @@ FEATURES += board_$(BOARD)
 
 build_args := \
 	-Z build-std=core,alloc \
+	-Z features=host_dep \
 	--target targets/$(target).json \
 	--features "$(FEATURES)"
 

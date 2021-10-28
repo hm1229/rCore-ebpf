@@ -24,8 +24,10 @@
               wget
               qemu
               ((rust-bin.fromRustupToolchainFile ./rust-toolchain).override {
-                extensions = [ "rust-src" "llvm-tools-preview" ];
+                extensions = [ "rust-src" "llvm-tools-preview" "rust-analyzer-preview" ];
               })
+              linuxHeaders
+              rust-bindgen
             ];
           };
         }
