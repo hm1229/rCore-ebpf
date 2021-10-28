@@ -105,6 +105,29 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
             super::ack(irq); // must ack before switching
             super::super::gdt::Cpu::current().handle_ipi();
         }
+        Breakpoint => {
+            info!("kprobe hit @ {:#x}", tf.rip - 1);
+            let prog = include_bytes!("../../../ebpf/syscall.bin");
+            let mut helpers: [ebpf_rs::interpret::Helper; 16] = [|_, _, _, _, _| 0; 16];
+            helpers[6] = |fmt, fmt_size, p1, p2, p3| unsafe {
+                let fmt = core::slice::from_raw_parts(fmt as *const u8, fmt_size as u32 as usize);
+                debug!("{}", dyn_fmt::Arguments::new(core::str::from_utf8_unchecked(fmt), &[p1, p2, p3]));
+                0
+            };
+            let ret = ebpf_rs::interpret::interpret(&prog.chunks_exact(8).map(|x| {
+                u64::from_le_bytes({
+                    let mut buf: [u8; 8] = Default::default();
+                    buf.copy_from_slice(x);
+                    buf
+                })
+            }).collect::<alloc::vec::Vec<u64>>(), &helpers, tf as *const TrapFrame as u64);
+            /*
+            unsafe {
+                *((tf.rip -1) as *mut u8) = 0x90;
+            }
+            info!("kprobe disarmed @ {:#x}", tf.rip - 1);
+            */
+        }
         _ => panic!("Unhandled interrupt {:x}", tf.trap_num),
     }
 }

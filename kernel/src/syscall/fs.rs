@@ -30,6 +30,7 @@ use rcore_fs::vfs::PollStatus;
 
 impl Syscall<'_> {
     pub async fn sys_read(&mut self, fd: usize, base: UserOutPtr<u8>, len: usize) -> SysResult {
+        unsafe { asm!("int3") };
         let mut proc = self.process();
         if !proc.pid.is_init() {
             // we trust pid 0 process

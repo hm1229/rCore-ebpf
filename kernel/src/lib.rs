@@ -1,3 +1,4 @@
+#![feature(asm)]
 #![feature(lang_items)]
 #![feature(naked_functions)]
 #![feature(untagged_unions)]

@@ -67,21 +67,6 @@ pub async fn handle_syscall(thread: &Arc<Thread>, context: &mut UserContext) -> 
         context.epc = context.epc + 4;
     }
 
-    let prog = include_bytes!("../ebpf/syscall.bin");
-    let mut helpers: [ebpf_rs::interpret::Helper; 16] = [|_, _, _, _, _| 0; 16];
-    helpers[6] = |fmt, fmt_size, p1, p2, p3| unsafe {
-        let fmt = core::slice::from_raw_parts(fmt as *const u8, fmt_size as u32 as usize);
-        debug!("{}", dyn_fmt::Arguments::new(core::str::from_utf8_unchecked(fmt), &[p1, p2, p3]));
-        0
-    };
-    let ret = ebpf_rs::interpret::interpret(&prog.chunks_exact(8).map(|x| {
-        u64::from_le_bytes({
-            let mut buf: [u8; 8] = Default::default();
-            buf.copy_from_slice(x);
-            buf
-        })
-    }).collect::<Vec<u64>>(), &helpers, num as u64);
-
     let mut syscall = Syscall {
         thread,
         context,
