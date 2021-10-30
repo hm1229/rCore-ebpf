@@ -1,6 +1,7 @@
 {
   inputs = {
     nixpkgs.url = "github:NickCao/nixpkgs/nixos-unstable-small";
+    nixpkgs-qemu.url = "github:NixOS/nixpkgs/9e403b19a1444b373874b6e9efdd728613c6badc";
     flake-utils.url = "github:numtide/flake-utils";
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
@@ -8,7 +9,7 @@
       inputs.flake-utils.follows = "flake-utils";
     };
   };
-  outputs = { self, nixpkgs, flake-utils, rust-overlay }:
+  outputs = { self, nixpkgs, nixpkgs-qemu, flake-utils, rust-overlay }:
     flake-utils.lib.eachDefaultSystem
       (system:
         let
@@ -16,13 +17,14 @@
             inherit system;
             overlays = [ rust-overlay.overlay ];
           };
+          pkgsQemu = import nixpkgs-qemu { inherit system; };
         in
         {
           devShell = pkgs.mkShell {
             LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
             buildInputs = with pkgs; [
               wget
-              qemu
+              pkgsQemu.qemu
               ((rust-bin.fromRustupToolchainFile ./rust-toolchain).override {
                 extensions = [ "rust-src" "llvm-tools-preview" "rust-analyzer-preview" ];
               })

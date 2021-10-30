@@ -31,10 +31,27 @@
         "type": "github"
       }
     },
+    "nixpkgs-qemu": {
+      "locked": {
+        "lastModified": 1611083188,
+        "narHash": "sha256-OExSYgpTVE+evZjBBWAOXZo7arAttgULtvbqG46Sao8=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "9e403b19a1444b373874b6e9efdd728613c6badc",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "9e403b19a1444b373874b6e9efdd728613c6badc",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "flake-utils": "flake-utils",
         "nixpkgs": "nixpkgs",
+        "nixpkgs-qemu": "nixpkgs-qemu",
         "rust-overlay": "rust-overlay"
       }
     },
