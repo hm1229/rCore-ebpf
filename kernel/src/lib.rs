@@ -60,6 +60,9 @@ pub mod sync;
 pub mod syscall;
 pub mod trap;
 
+#[cfg(target_arch = "riscv64")]
+pub mod kprobes;
+
 #[allow(dead_code)]
 #[cfg(target_arch = "x86_64")]
 #[path = "arch/x86_64/mod.rs"]
