@@ -51,8 +51,13 @@ lazy_static! {
     static ref SYSCALL_TIMING: Mutex<BTreeMap<usize, i64>> = Mutex::new(BTreeMap::new());
 }
 
+#[inline(never)]
+pub fn hook_point() {
+}
+
 /// System call dispatcher
 pub async fn handle_syscall(thread: &Arc<Thread>, context: &mut UserContext) -> bool {
+    hook_point();
     let regs = &context.general;
     let num = context.get_syscall_num();
     let args = context.get_syscall_args();
@@ -65,30 +70,6 @@ pub async fn handle_syscall(thread: &Arc<Thread>, context: &mut UserContext) -> 
     #[cfg(mipsel)]
     {
         context.epc = context.epc + 4;
-    }
-
-    #[cfg(x86_64)]
-    {
-        // begin kprobe hook
-        #[repr(C)]
-        struct kprobe_context {
-            num: usize,
-            args: [usize; 6],
-        }
-    
-        let kctx = kprobe_context {
-            num,
-            args,
-        };
-        unsafe {
-            asm!(
-                "mov r10, {0}",
-                "int3",
-                in(reg) &kctx as *const kprobe_context as usize,
-                out("r10") _,
-            );
-        }
-        // end kprobe hook
     }
 
     let mut syscall = Syscall {

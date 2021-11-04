@@ -63,7 +63,7 @@ impl Kprobes{
         self.prepare_kprobe();
     }
     pub fn prepare_kprobe(&self){
-        let addr = syscall::handle_syscall as usize;
+        let addr = syscall::hook_point as usize;
         let addr_break = __ebreak as usize;
         let slot = slot_insn as usize;
 
@@ -76,7 +76,7 @@ impl Kprobes{
     }
 
     pub fn restore_kprobe(&self){
-        let addr = syscall::handle_syscall as usize;
+        let addr = syscall::hook_point as usize;
         let slot = slot_insn as usize;
 
         let mut addr = unsafe{core::slice::from_raw_parts_mut(addr as *mut u8, 2)};
