@@ -52,8 +52,7 @@ lazy_static! {
 }
 
 #[inline(never)]
-pub fn hook_point() {
-}
+pub fn hook_point() {}
 
 /// System call dispatcher
 pub async fn handle_syscall(thread: &Arc<Thread>, context: &mut UserContext) -> bool {
