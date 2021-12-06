@@ -12,7 +12,7 @@ pub struct Kprobes {
 
 pub struct KprobesInner {
     pub addr: usize,
-    pub slot: [u8; 64],
+    pub slot: [u8; 8],
     pub pre_handler: fn(),
     pub insn_length: usize,
 }
@@ -36,7 +36,7 @@ impl Kprobes {
             inner: RefCell::new(KprobesInner {
                 addr: 0,
                 pre_handler: || {},
-                slot: [0; 64],
+                slot: [0; 8],
                 insn_length: 0,
             }),
         }
@@ -76,7 +76,7 @@ impl Kprobes {
         let mut kprobes = self.inner.borrow_mut();
         if cx.sepc == kprobes.addr {
             (kprobes.pre_handler)();
-            cx.sepc = &kprobes.slot as *const [u8; 64] as usize;
+            cx.sepc = &kprobes.slot as *const [u8; 8] as usize;
         } else {
             cx.sepc = kprobes.addr + kprobes.insn_length;
         }
