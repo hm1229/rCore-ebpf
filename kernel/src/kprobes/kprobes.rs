@@ -7,6 +7,7 @@ use core::pin::Pin;
 use core::slice::from_raw_parts_mut;
 use lazy_static::*;
 use trapframe::TrapFrame;
+
 pub struct Kprobes {
     pub inner: RefCell<KprobesInner>,
 }
@@ -53,8 +54,11 @@ impl Kprobes {
     pub fn prepare_kprobe(&self) {
         let mut inner = self.inner.borrow_mut();
         let addr = inner.addr;
-        let temp = unsafe { core::slice::from_raw_parts_mut(addr as *mut u8, 1) };
-        inner.insn_length = if temp[0] & 0b11 == 0b11 { 4 } else { 2 };
+        inner.insn_length = if unsafe { *(addr as *const u8) } & 0b11 == 0b11 {
+            4
+        } else {
+            2
+        };
         let length = inner.insn_length;
         let mut addr = unsafe { from_raw_parts_mut(addr as *mut u8, length) };
         let mut addr_break = unsafe { from_raw_parts_mut(__ebreak as *mut u8, length) };
@@ -65,11 +69,11 @@ impl Kprobes {
     }
     pub fn unregister_kprobe(&self) {
         let inner = self.inner.borrow();
-        let addr = inner.addr;
-        let length = inner.insn_length;
-        let mut addr = unsafe { core::slice::from_raw_parts_mut(addr as *mut u8, length) };
-        addr.copy_from_slice(&inner.slot);
-        unsafe { asm!("fence.i") };
+        unsafe {
+            from_raw_parts_mut(inner.addr as *mut u8, inner.insn_length)
+                .copy_from_slice(&inner.slot);
+            asm!("fence.i")
+        };
     }
     fn kprobes_trap_handler(&self, cx: &mut TrapFrame) {
         let mut kprobes = self.inner.borrow_mut();
