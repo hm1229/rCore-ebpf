@@ -1,13 +1,13 @@
 use crate::syscall;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
+use core::borrow::BorrowMut;
 use core::cell::RefCell;
 use core::pin::Pin;
 use lazy_static::*;
 use trapframe::TrapFrame;
 
 global_asm!(include_str!("ebreak.S"));
-global_asm!(include_str!("jump.S"));
 
 pub struct Kprobes {
     pub inner: RefCell<KprobesInner>,
@@ -15,7 +15,7 @@ pub struct Kprobes {
 
 pub struct KprobesInner {
     pub addr: usize,
-    pub slot: Pin<Arc<[u8; 64]>>,
+    pub slot: [u8; 64],
     pub pre_handler: fn(),
     pub insn_length: usize,
 }
@@ -28,7 +28,6 @@ lazy_static! {
 
 extern "C" {
     pub fn __ebreak();
-    pub fn __jump();
 }
 
 impl Kprobes {
@@ -37,7 +36,7 @@ impl Kprobes {
             inner: RefCell::new(KprobesInner {
                 addr: 0,
                 pre_handler: || {},
-                slot: Arc::pin([0; 64]),
+                slot: [0;64],
                 insn_length: 0,
             }),
         }
@@ -54,20 +53,14 @@ impl Kprobes {
         let mut inner = self.inner.borrow_mut();
         let addr = inner.addr;
         let addr_break = __ebreak as usize;
-        let addr_jump = __jump as usize;
-        let slot = &*inner.slot as *const [u8; 64] as usize;
         let temp = unsafe { core::slice::from_raw_parts_mut(addr as *mut u8, 1) };
         inner.insn_length = if temp[0] & 0b11 == 0b11 { 4 } else { 2 };
         let length = inner.insn_length;
         let mut addr = unsafe { core::slice::from_raw_parts_mut(addr as *mut u8, length) };
         let mut addr_break =
             unsafe { core::slice::from_raw_parts_mut(addr_break as *mut u8, length) };
-        let mut addr_jump = unsafe { core::slice::from_raw_parts_mut(addr_jump as *mut u8, 4) };
-        let mut slot_ptr = unsafe { core::slice::from_raw_parts_mut(slot as *mut u8, length) };
-        let mut slot_ptr_next =
-            unsafe { core::slice::from_raw_parts_mut((slot + length) as *mut u8, 4) };
-        slot_ptr.copy_from_slice(addr);
-        slot_ptr_next.copy_from_slice(addr_jump);
+        inner.slot[..length].copy_from_slice(addr);
+        inner.slot[length..length + length].copy_from_slice(addr_break);
         addr.copy_from_slice(addr_break);
         unsafe { asm!("fence.i") };
     }
@@ -76,14 +69,16 @@ impl Kprobes {
         let addr = inner.addr;
         let length = inner.insn_length;
         let mut addr = unsafe { core::slice::from_raw_parts_mut(addr as *mut u8, length) };
-        addr.copy_from_slice(Pin::into_inner(inner.slot.clone()).as_ref());
+        addr.copy_from_slice(&inner.slot);
+        unsafe { asm!("fence.i") };
     }
     fn kprobes_trap_handler(&self, cx: &mut TrapFrame) {
         let mut kprobes = self.inner.borrow_mut();
         if cx.sepc == kprobes.addr {
             (kprobes.pre_handler)();
-            cx.general.s1 = cx.sepc + kprobes.insn_length; // TODO: encode s1 in jump instruction
-            cx.sepc = &*kprobes.slot as *const [u8; 64] as usize;
+            cx.sepc = &kprobes.slot as *const [u8;64] as usize;
+        } else {
+            cx.sepc = kprobes.addr + kprobes.insn_length;
         }
     }
 }
