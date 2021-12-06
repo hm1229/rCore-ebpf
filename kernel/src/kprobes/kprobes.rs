@@ -1,8 +1,10 @@
 use crate::syscall;
+use alloc::boxed::Box;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
 use core::borrow::BorrowMut;
 use core::cell::RefCell;
+use core::ops::FnMut;
 use core::pin::Pin;
 use core::slice::{from_raw_parts, from_raw_parts_mut};
 use lazy_static::*;
@@ -17,7 +19,7 @@ pub struct KprobesInner {
     pub addr: usize,
     pub length: usize,
     pub slot: [u8; 8],
-    pub handler: fn(&mut TrapFrame),
+    pub handler: Box<dyn FnMut(&mut TrapFrame) + Send>,
 }
 
 unsafe impl Sync for Kprobes {}
@@ -35,7 +37,7 @@ extern "C" fn __ebreak() {
 }
 
 impl KprobesInner {
-    pub fn new(addr: usize, handler: fn(&mut TrapFrame)) -> Self {
+    pub fn new(addr: usize, handler: Box<dyn FnMut(&mut TrapFrame) + Send>) -> Self {
         // read the lowest byte of the probed instruction to determine whether it is compressed
         let length = if unsafe { *(addr as *const u8) } & 0b11 == 0b11 {
             4
@@ -78,7 +80,11 @@ impl Kprobes {
             ret: RefCell::new(BTreeMap::new()),
         }
     }
-    pub fn register_kprobe(&self, addr: usize, handler: fn(&mut TrapFrame)) -> isize {
+    pub fn register_kprobe(
+        &self,
+        addr: usize,
+        handler: Box<dyn FnMut(&mut TrapFrame) + Send>,
+    ) -> isize {
         let probe = KprobesInner::new(addr, handler);
         probe.arm();
         if let Some(replaced) = self.inner.borrow_mut().insert(addr, probe) {
@@ -95,7 +101,7 @@ impl Kprobes {
     }
     pub fn kprobes_trap_handler(&self, cx: &mut TrapFrame) {
         let mut kprobes = self.inner.borrow_mut();
-        match kprobes.get(&cx.sepc) {
+        match kprobes.get_mut(&cx.sepc) {
             Some(probe) => {
                 (probe.handler)(cx);
                 let slot = &probe.slot as *const [u8; 8] as usize;

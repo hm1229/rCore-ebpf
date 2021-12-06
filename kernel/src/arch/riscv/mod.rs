@@ -78,7 +78,13 @@ pub extern "C" fn rust_main(hartid: usize, device_tree_paddr: usize) -> ! {
         hartid, device_tree_vaddr
     );
     AP_CAN_INIT.store(true, Ordering::Relaxed);
-    crate::kprobes::kprobe_register();
+
+    crate::kprobes::kprobe_register(
+        crate::syscall::hook_point as usize,
+        alloc::boxed::Box::new(|cx| {
+            info!("hit kprobe");
+        }),
+    );
 
     crate::kmain();
 }

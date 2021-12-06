@@ -45,6 +45,7 @@ pub mod util;
 pub mod backtrace;
 pub mod consts;
 pub mod drivers;
+pub mod ebpf;
 pub mod fs;
 pub mod ipc;
 pub mod lang;
