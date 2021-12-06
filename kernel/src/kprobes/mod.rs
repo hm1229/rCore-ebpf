@@ -1,13 +1,11 @@
-mod kprobe_pre_handler;
 mod kprobes;
 
-use kprobe_pre_handler::pre_handler;
-pub use kprobes::{kprobes_trap_handler, KPROBES};
+pub use kprobes::kprobes_trap_handler;
 
 pub fn kprobe_register() {
-    KPROBES.register_kprobe(pre_handler);
+    kprobes::KPROBES.register_kprobe(|| debug!("enter kprobes"));
 }
 
 pub fn kprobe_unregister() {
-    KPROBES.unregister_kprobe();
+    kprobes::KPROBES.unregister_kprobe();
 }
