@@ -10,6 +10,7 @@ use trapframe::TrapFrame;
 
 pub struct Kprobes {
     pub inner: RefCell<BTreeMap<usize, KprobesInner>>,
+    pub ret: RefCell<BTreeMap<usize, usize>>,
 }
 
 pub struct KprobesInner {
@@ -74,6 +75,7 @@ impl Kprobes {
     pub fn new() -> Self {
         Self {
             inner: RefCell::new(BTreeMap::new()),
+            ret: RefCell::new(BTreeMap::new()),
         }
     }
     pub fn register_kprobe(&self, addr: usize, handler: fn(&mut TrapFrame)) -> isize {
@@ -96,12 +98,18 @@ impl Kprobes {
         match kprobes.get(&cx.sepc) {
             Some(probe) => {
                 (probe.handler)(cx);
-                cx.sepc = &probe.slot as *const [u8; 8] as usize;
+                let slot = &probe.slot as *const [u8; 8] as usize;
+                cx.sepc = slot;
+                self.ret
+                    .borrow_mut()
+                    .insert(slot + probe.length, probe.addr + probe.length);
             }
-            None => {}
+            None => {
+                if let Some(addr) = self.ret.borrow_mut().remove(&cx.sepc) {
+                    cx.sepc = addr;
+                }
+            }
         }
-        // TODO: handle ebreak in slot
-        // cx.sepc = kprobes.addr + kprobes.insn_length;
     }
 }
 
