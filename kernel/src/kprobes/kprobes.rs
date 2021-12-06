@@ -4,6 +4,7 @@ use alloc::sync::Arc;
 use core::borrow::BorrowMut;
 use core::cell::RefCell;
 use core::pin::Pin;
+use core::slice::from_raw_parts_mut;
 use lazy_static::*;
 use trapframe::TrapFrame;
 pub struct Kprobes {
@@ -52,13 +53,11 @@ impl Kprobes {
     pub fn prepare_kprobe(&self) {
         let mut inner = self.inner.borrow_mut();
         let addr = inner.addr;
-        let addr_break = __ebreak as usize;
         let temp = unsafe { core::slice::from_raw_parts_mut(addr as *mut u8, 1) };
         inner.insn_length = if temp[0] & 0b11 == 0b11 { 4 } else { 2 };
         let length = inner.insn_length;
-        let mut addr = unsafe { core::slice::from_raw_parts_mut(addr as *mut u8, length) };
-        let mut addr_break =
-            unsafe { core::slice::from_raw_parts_mut(addr_break as *mut u8, length) };
+        let mut addr = unsafe { from_raw_parts_mut(addr as *mut u8, length) };
+        let mut addr_break = unsafe { from_raw_parts_mut(__ebreak as *mut u8, length) };
         inner.slot[..length].copy_from_slice(addr);
         inner.slot[length..length + length].copy_from_slice(addr_break);
         addr.copy_from_slice(addr_break);
