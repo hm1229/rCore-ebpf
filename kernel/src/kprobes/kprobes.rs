@@ -1,5 +1,4 @@
 use crate::syscall;
-use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use core::borrow::BorrowMut;
 use core::cell::RefCell;
@@ -53,17 +52,20 @@ impl Kprobes {
     }
     pub fn prepare_kprobe(&self) {
         let mut inner = self.inner.borrow_mut();
-        let addr = inner.addr;
-        inner.insn_length = if unsafe { *(addr as *const u8) } & 0b11 == 0b11 {
+        // read the lowest byte of the probed instruction to determine whether it is compressed
+        inner.insn_length = if unsafe { *(inner.addr as *const u8) } & 0b11 == 0b11 {
             4
         } else {
             2
         };
-        let length = inner.insn_length;
-        let mut addr = unsafe { from_raw_parts_mut(addr as *mut u8, length) };
-        let mut addr_break = unsafe { from_raw_parts_mut(__ebreak as *mut u8, length) };
+        // TODO: check whether the instruction is safe to execute out of context
+        let mut addr = unsafe { from_raw_parts_mut(inner.addr as *mut u8, inner.insn_length) };
+        let mut addr_break = unsafe { from_raw_parts_mut(__ebreak as *mut u8, inner.insn_length) };
+        // save the probed instruction to a buffer
         inner.slot[..length].copy_from_slice(addr);
+        // append ebreak to the buffer
         inner.slot[length..length + length].copy_from_slice(addr_break);
+        // replace the instruction with ebreak
         addr.copy_from_slice(addr_break);
         unsafe { asm!("fence.i") };
     }
