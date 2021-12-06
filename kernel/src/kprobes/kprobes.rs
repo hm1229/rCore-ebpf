@@ -6,9 +6,6 @@ use core::cell::RefCell;
 use core::pin::Pin;
 use lazy_static::*;
 use trapframe::TrapFrame;
-
-global_asm!(include_str!("ebreak.S"));
-
 pub struct Kprobes {
     pub inner: RefCell<KprobesInner>,
 }
@@ -26,8 +23,11 @@ lazy_static! {
     pub static ref KPROBES: Kprobes = Kprobes::new();
 }
 
-extern "C" {
-    pub fn __ebreak();
+#[naked]
+extern "C" fn __ebreak() {
+    unsafe {
+        asm!("c.ebreak", "c.ebreak");
+    }
 }
 
 impl Kprobes {
@@ -36,7 +36,7 @@ impl Kprobes {
             inner: RefCell::new(KprobesInner {
                 addr: 0,
                 pre_handler: || {},
-                slot: [0;64],
+                slot: [0; 64],
                 insn_length: 0,
             }),
         }
@@ -76,7 +76,7 @@ impl Kprobes {
         let mut kprobes = self.inner.borrow_mut();
         if cx.sepc == kprobes.addr {
             (kprobes.pre_handler)();
-            cx.sepc = &kprobes.slot as *const [u8;64] as usize;
+            cx.sepc = &kprobes.slot as *const [u8; 64] as usize;
         } else {
             cx.sepc = kprobes.addr + kprobes.insn_length;
         }
