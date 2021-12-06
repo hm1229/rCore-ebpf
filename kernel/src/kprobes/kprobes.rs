@@ -13,24 +13,15 @@ pub struct Kprobes {
 
 pub struct KprobesInner {
     pub addr: usize,
-
     pub name: String,
-
-    /* 在被探测点指令执行之前调用的回调函数 */
     pub pre_handler: fn(),
-
-    /* 在被探测点指令执行之后调用的回调函数 */
     pub post_handler: fn(),
-
-    /* 被复制的被探测点的原始指令（Risc-V） */
     pub insn_back: usize,
-
     pub slot_addr: usize,
-
     pub insn_s1: usize,
-
     pub insn_length: usize,
 }
+
 unsafe impl Sync for Kprobes {}
 
 lazy_static! {
@@ -39,13 +30,10 @@ lazy_static! {
 
 extern "C" {
     pub fn __ebreak();
-}
-extern "C" {
     pub fn __jump();
 }
 
 impl Kprobes {
-    /* 向内核注册kprobe探测点 */
     fn new() -> Self {
         Self {
             inner: RefCell::new(KprobesInner {
@@ -130,6 +118,4 @@ pub fn kprobes_trap_handler(cx: &mut TrapFrame) {
     KPROBES.kprobes_trap_handler(cx);
 }
 
-fn slot_insn() {
-    println!("???");
-}
+fn slot_insn() {}
