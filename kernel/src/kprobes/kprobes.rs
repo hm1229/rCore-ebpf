@@ -1,24 +1,26 @@
 use crate::syscall;
+use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
 use core::borrow::BorrowMut;
 use core::cell::RefCell;
 use core::pin::Pin;
-use core::slice::from_raw_parts_mut;
+use core::slice::{from_raw_parts, from_raw_parts_mut};
 use lazy_static::*;
 use trapframe::TrapFrame;
 
 pub struct Kprobes {
-    pub inner: RefCell<KprobesInner>,
+    pub inner: RefCell<BTreeMap<usize, KprobesInner>>,
 }
 
 pub struct KprobesInner {
     pub addr: usize,
+    pub length: usize,
     pub slot: [u8; 8],
-    pub pre_handler: fn(),
-    pub insn_length: usize,
+    pub handler: fn(&mut TrapFrame),
 }
 
 unsafe impl Sync for Kprobes {}
+unsafe impl Sync for KprobesInner {}
 
 lazy_static! {
     pub static ref KPROBES: Kprobes = Kprobes::new();
@@ -31,60 +33,75 @@ extern "C" fn __ebreak() {
     }
 }
 
-impl Kprobes {
-    fn new() -> Self {
-        Self {
-            inner: RefCell::new(KprobesInner {
-                addr: 0,
-                pre_handler: || {},
-                slot: [0; 8],
-                insn_length: 0,
-            }),
-        }
-    }
-    pub fn register_kprobe(&self, pre_handler: fn()) {
-        let mut inner = self.inner.borrow_mut();
-        let addr = syscall::hook_point as usize;
-        inner.addr = addr;
-        inner.pre_handler = pre_handler;
-        drop(inner);
-        self.prepare_kprobe();
-    }
-    pub fn prepare_kprobe(&self) {
-        let mut inner = self.inner.borrow_mut();
+impl KprobesInner {
+    pub fn new(addr: usize, handler: fn(&mut TrapFrame)) -> Self {
         // read the lowest byte of the probed instruction to determine whether it is compressed
-        inner.insn_length = if unsafe { *(inner.addr as *const u8) } & 0b11 == 0b11 {
+        let length = if unsafe { *(addr as *const u8) } & 0b11 == 0b11 {
             4
         } else {
             2
         };
         // TODO: check whether the instruction is safe to execute out of context
-        let mut addr = unsafe { from_raw_parts_mut(inner.addr as *mut u8, inner.insn_length) };
-        let mut addr_break = unsafe { from_raw_parts_mut(__ebreak as *mut u8, inner.insn_length) };
+        let mut inst = unsafe { from_raw_parts_mut(addr as *mut u8, length) };
+        let mut slot = [0; 8];
         // save the probed instruction to a buffer
-        inner.slot[..length].copy_from_slice(addr);
+        slot[..length].copy_from_slice(inst);
         // append ebreak to the buffer
-        inner.slot[length..length + length].copy_from_slice(addr_break);
-        // replace the instruction with ebreak
-        addr.copy_from_slice(addr_break);
+        let ebreak = unsafe { from_raw_parts(__ebreak as *const u8, length) };
+        slot[length..length + length].copy_from_slice(ebreak);
+        Self {
+            addr,
+            length,
+            slot,
+            handler,
+        }
+    }
+    pub fn arm(&self) {
+        // replace the probed instruction with ebreak
+        let ebreak = unsafe { from_raw_parts(__ebreak as *const u8, self.length) };
+        let mut inst = unsafe { from_raw_parts_mut(self.addr as *mut u8, self.length) };
+        inst.copy_from_slice(ebreak);
         unsafe { asm!("fence.i") };
     }
-    pub fn unregister_kprobe(&self) {
-        let inner = self.inner.borrow();
-        unsafe {
-            from_raw_parts_mut(inner.addr as *mut u8, inner.insn_length)
-                .copy_from_slice(&inner.slot);
-            asm!("fence.i")
-        };
+    pub fn disarm(&self) {
+        let mut inst = unsafe { from_raw_parts_mut(self.addr as *mut u8, self.length) };
+        inst.copy_from_slice(&self.slot);
+        unsafe { asm!("fence.i") };
     }
-    fn kprobes_trap_handler(&self, cx: &mut TrapFrame) {
-        let mut kprobes = self.inner.borrow_mut();
-        if cx.sepc == kprobes.addr {
-            (kprobes.pre_handler)();
-            cx.sepc = &kprobes.slot as *const [u8; 8] as usize;
-        } else {
-            cx.sepc = kprobes.addr + kprobes.insn_length;
+}
+
+impl Kprobes {
+    pub fn new() -> Self {
+        Self {
+            inner: RefCell::new(BTreeMap::new()),
         }
+    }
+    pub fn register_kprobe(&self, addr: usize, handler: fn(&mut TrapFrame)) -> isize {
+        let probe = KprobesInner::new(addr, handler);
+        probe.arm();
+        if let Some(replaced) = self.inner.borrow_mut().insert(addr, probe) {
+            replaced.disarm();
+        }
+        0
+    }
+    pub fn unregister_kprobe(&self, addr: usize) -> isize {
+        if let Some(probe) = self.inner.borrow_mut().remove(&addr) {
+            probe.disarm();
+            return 0;
+        }
+        -1
+    }
+    pub fn kprobes_trap_handler(&self, cx: &mut TrapFrame) {
+        let mut kprobes = self.inner.borrow_mut();
+        match kprobes.get(&cx.sepc) {
+            Some(probe) => {
+                (probe.handler)(cx);
+                cx.sepc = &probe.slot as *const [u8; 8] as usize;
+            }
+            None => {}
+        }
+        // TODO: handle ebreak in slot
+        // cx.sepc = kprobes.addr + kprobes.insn_length;
     }
 }
 
