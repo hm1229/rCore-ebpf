@@ -57,7 +57,11 @@ impl Syscall<'_> {
         Ok(0)
     }
 
-    pub fn sys_register_kprobe(&mut self, addr: usize) -> SysResult {
+    pub fn sys_register_ebpf(&mut self, addr: usize, base: *const u8, len: usize) -> SysResult {
+        Ok(0)
+    }
+
+    pub fn sys_unregister_ebpf(&mut self, addr: usize) -> SysResult {
         Ok(0)
     }
 }

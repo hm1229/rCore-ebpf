@@ -283,4 +283,5 @@ pub const SYS_RISCV_FLUSH_ICACHE: usize = SYS_SYSRISCV + 15;
 // custom temporary syscall
 pub const SYS_MAP_PCI_DEVICE: usize = 999;
 pub const SYS_GET_PADDR: usize = 998;
-pub const SYS_REGISTER_KPROBE: usize = 997;
+pub const SYS_REGISTER_EBPF: usize = 1000;
+pub const SYS_UNREGISTER_EBPF: usize = 1001;
