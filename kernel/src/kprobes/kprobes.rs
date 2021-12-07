@@ -59,6 +59,7 @@ impl KprobesInner {
                 if inst & 0b00000000000000010000000100010011 == 0b00000000000000010000000100010011 {
                     // addi sp, sp, imm
                     addisp = sext(((inst >> 20) & 0b111111111111) as isize, 12) as usize;
+                    debug!("kprobes: hook on addi sp, sp, {}", addisp as isize);
                 } else {
                     warn!("kprobes: target instruction is not addi sp, sp, imm");
                     return None;
@@ -67,13 +68,7 @@ impl KprobesInner {
             2 => {
                 // compressed instruction
                 let inst = u16::from_le_bytes(slot[..length].try_into().unwrap());
-                if inst & 0b0000000100000001 == 0b0000000100000001 {
-                    // c.addi sp, imm
-                    addisp = sext(
-                        ((((inst >> 12) & 0b1) << 5) + (((inst >> 2) & 0b11111) << 0)) as isize,
-                        6,
-                    ) as usize;
-                } else if inst & 0b0110000100000001 == 0b0110000100000001 {
+                if inst & 0b0110000100000001 == 0b0110000100000001 {
                     // c.addi16sp imm
                     addisp = sext(
                         ((((inst >> 12) & 0b1) << 9)
@@ -83,6 +78,14 @@ impl KprobesInner {
                             + (((inst >> 2) & 0b1) << 5)) as isize,
                         10,
                     ) as usize;
+                    debug!("kprobes: hook on c.addi16sp {}", addisp as isize);
+                } else if inst & 0b0000000100000001 == 0b0000000100000001 {
+                    // c.addi sp, imm
+                    addisp = sext(
+                        ((((inst >> 12) & 0b1) << 5) + (((inst >> 2) & 0b11111) << 0)) as isize,
+                        6,
+                    ) as usize;
+                    debug!("kprobes: hook on c.addi sp, {}", addisp as isize);
                 } else {
                     warn!("kprobes: target instruction is not c.addi sp, imm or c.addi16sp imm");
                     return None;
