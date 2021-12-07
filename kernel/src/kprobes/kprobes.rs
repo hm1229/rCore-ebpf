@@ -60,6 +60,7 @@ impl KprobesInner {
                     // addi sp, sp, imm
                     addisp = sext(((inst >> 20) & 0b111111111111) as isize, 12) as usize;
                 } else {
+                    warn!("kprobes: target instruction is not addi sp, sp, imm");
                     return None;
                 }
             }
@@ -67,12 +68,23 @@ impl KprobesInner {
                 // compressed instruction
                 let inst = u16::from_le_bytes(slot[..length].try_into().unwrap());
                 if inst & 0b0000000100000001 == 0b0000000100000001 {
-                    // c.addi sp, sp, imm
+                    // c.addi sp, imm
                     addisp = sext(
                         ((((inst >> 12) & 0b1) << 5) + (((inst >> 2) & 0b11111) << 0)) as isize,
                         6,
                     ) as usize;
+                } else if inst & 0b0110000100000001 == 0b0110000100000001 {
+                    // c.addi16sp imm
+                    addisp = sext(
+                        ((((inst >> 12) & 0b1) << 9)
+                            + (((inst >> 6) & 0b1) << 4)
+                            + (((inst >> 5) & 0b1) << 6)
+                            + (((inst >> 3) & 0b11) << 7)
+                            + (((inst >> 2) & 0b1) << 5)) as isize,
+                        10,
+                    ) as usize;
                 } else {
+                    warn!("kprobes: target instruction is not c.addi sp, imm or c.addi16sp imm");
                     return None;
                 }
             }
@@ -118,6 +130,7 @@ impl Kprobes {
             }
             0
         } else {
+            error!("kprobes: probe initialization failed");
             -1
         }
     }
@@ -135,8 +148,8 @@ impl Kprobes {
                 // run user defined handler
                 (probe.handler)(cx);
                 // single step the probed instruction
-                cx.general.sp += probe.addisp;
-                cx.sepc += probe.length;
+                cx.general.sp = cx.general.sp.wrapping_add(probe.addisp);
+                cx.sepc = cx.sepc.wrapping_add(probe.length);
             }
             None => {}
         }
