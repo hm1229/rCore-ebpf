@@ -28,8 +28,9 @@
               ((rust-bin.fromRustupToolchainFile ./rust-toolchain).override {
                 extensions = [ "rust-src" "llvm-tools-preview" "rust-analyzer-preview" ];
               })
-              linuxHeaders
-              rust-bindgen
+              cmake
+              pkgsCross.riscv64.pkgsMusl.buildPackages.bintools
+              pkgsCross.riscv64.pkgsMusl.buildPackages.gcc
             ];
           };
         }
