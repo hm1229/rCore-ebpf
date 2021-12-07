@@ -1,5 +1,6 @@
 //! Custom nonstandard syscalls
 use super::*;
+use core::convert::TryInto;
 
 impl Syscall<'_> {
     /// Allocate this PCI device to user space
@@ -58,10 +59,22 @@ impl Syscall<'_> {
     }
 
     pub fn sys_register_ebpf(&mut self, addr: usize, base: *const u8, len: usize) -> SysResult {
+        let mut proc = self.process();
+        let slice = unsafe { self.vm().check_read_array(base, len)? };
+        let prog = slice
+            .chunks_exact(8)
+            .map(|x| u64::from_le_bytes(x.try_into().unwrap()))
+            .collect::<alloc::vec::Vec<u64>>();
+        if crate::ebpf::ebpf_register(addr, prog) != 0 {
+            return Err(SysError::EINVAL);
+        }
         Ok(0)
     }
 
     pub fn sys_unregister_ebpf(&mut self, addr: usize) -> SysResult {
+        if crate::ebpf::ebpf_unregister(addr) != 0 {
+            return Err(SysError::EINVAL);
+        }
         Ok(0)
     }
 }
