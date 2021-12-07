@@ -4,6 +4,7 @@ use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
 use core::borrow::BorrowMut;
 use core::cell::RefCell;
+use core::convert::TryInto;
 use core::ops::FnMut;
 use core::pin::Pin;
 use core::slice::{from_raw_parts, from_raw_parts_mut};
@@ -23,6 +24,7 @@ pub struct KprobesInner {
     pub addr: usize,
     pub length: usize,
     pub slot: [u8; 4],
+    pub addisp: usize,
     pub handler: Box<dyn FnMut(&mut TrapFrame) + Send>,
 }
 
@@ -41,19 +43,48 @@ extern "C" fn __ebreak() {
 }
 
 impl KprobesInner {
-    pub fn new(addr: usize, handler: Box<dyn FnMut(&mut TrapFrame) + Send>) -> Self {
+    pub fn new(addr: usize, handler: Box<dyn FnMut(&mut TrapFrame) + Send>) -> Option<Self> {
         let inst = unsafe { from_raw_parts(addr as *const u8, 4) };
         // read the lowest byte of the probed instruction to determine whether it is compressed
         let length = if inst[0] & 0b11 == 0b11 { 4 } else { 2 };
         // save the probed instruction to a buffer
         let mut slot = [0; 4];
         slot[..length].copy_from_slice(&inst[..length]);
-        Self {
+        // decode the probed instruction to retrive imm
+        let mut addisp: usize = 0;
+        match length {
+            4 => {
+                // normal instruction
+                let inst = u32::from_le_bytes(slot[..length].try_into().unwrap());
+                if inst & 0b00000000000000010000000100010011 == 0b00000000000000010000000100010011 {
+                    // addi sp, sp, imm
+                    addisp = sext(((inst >> 20) & 0b111111111111) as isize, 12) as usize;
+                } else {
+                    return None;
+                }
+            }
+            2 => {
+                // compressed instruction
+                let inst = u16::from_le_bytes(slot[..length].try_into().unwrap());
+                if inst & 0b0000000100000001 == 0b0000000100000001 {
+                    // c.addi sp, sp, imm
+                    addisp = sext(
+                        ((((inst >> 12) & 0b1) << 5) + (((inst >> 2) & 0b11111) << 0)) as isize,
+                        6,
+                    ) as usize;
+                } else {
+                    return None;
+                }
+            }
+            _ => return None,
+        };
+        Some(Self {
             addr,
             length,
             slot,
+            addisp,
             handler,
-        }
+        })
     }
     pub fn arm(&self) {
         let ebreak = unsafe { from_raw_parts(__ebreak as *const u8, self.length) };
@@ -80,11 +111,15 @@ impl Kprobes {
         handler: Box<dyn FnMut(&mut TrapFrame) + Send>,
     ) -> isize {
         let probe = KprobesInner::new(addr, handler);
-        probe.arm();
-        if let Some(replaced) = self.inner.borrow_mut().insert(addr, probe) {
-            replaced.disarm();
+        if let Some(probe) = probe {
+            probe.arm();
+            if let Some(replaced) = self.inner.borrow_mut().insert(addr, probe) {
+                replaced.disarm();
+            }
+            0
+        } else {
+            -1
         }
-        0
     }
     pub fn unregister_kprobe(&self, addr: usize) -> isize {
         if let Some(probe) = self.inner.borrow_mut().remove(&addr) {
@@ -100,48 +135,7 @@ impl Kprobes {
                 // run user defined handler
                 (probe.handler)(cx);
                 // single step the probed instruction
-                match probe.length {
-                    4 => {
-                        // normal instruction
-                        let mut buf: [u8; 4] = [0; 4];
-                        buf.copy_from_slice(&probe.slot[..4]);
-                        let inst = u32::from_le_bytes(buf);
-                        if inst & 0b00000000000000000000000000010011
-                            == 0b00000000000000000000000000010011
-                        {
-                            // addi
-                            let rd: u8 = ((inst >> 7) & 0b11111) as u8;
-                            let rs1: u8 = ((inst >> 15) & 0b11111) as u8;
-                            let imm: isize = sext(((inst >> 20) & 0b111111111111) as isize, 12);
-                            if rd != 2 || rs1 != 2 {
-                                panic!("rs1 or rd not sp");
-                            }
-                            cx.general.sp += imm as usize;
-                        } else {
-                            panic!("not addi");
-                        }
-                    }
-                    _ => {
-                        // compressed instruction
-                        let mut buf: [u8; 2] = [0; 2];
-                        buf.copy_from_slice(&probe.slot[..2]);
-                        let inst = u16::from_le_bytes(buf);
-                        if inst & 0b0000000000000001 == 0b0000000000000001 {
-                            // c.addi
-                            let rd: u8 = (inst >> 7 & 0b11111) as u8;
-                            let imm: isize = ((((inst >> 12) & 0b1) << 5)
-                                + (((inst >> 2) & 0b11111) << 0))
-                                as isize;
-                            let imm: isize = sext(imm, 6);
-                            if rd != 2 {
-                                panic!("rs1/rd not sp");
-                            }
-                            cx.general.sp += imm as usize;
-                        } else {
-                            panic!("not c.addi");
-                        }
-                    }
-                };
+                cx.general.sp += probe.addisp;
                 cx.sepc += probe.length;
             }
             None => {}
