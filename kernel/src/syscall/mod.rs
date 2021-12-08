@@ -483,7 +483,7 @@ impl Syscall<'_> {
     }
 
     fn unimplemented(&self, name: &str, ret: SysResult) -> SysResult {
-        warn!("{} is unimplemented", name);
+        info!("{} is unimplemented", name);
         ret
     }
 
