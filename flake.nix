@@ -29,7 +29,9 @@
                 extensions = [ "rust-src" "llvm-tools-preview" "rust-analyzer-preview" ];
               })
               cmake
+              gdb
               llvmPackages_13.bintools
+              llvmPackages_13.clang-unwrapped
               pkgsCross.riscv64.pkgsMusl.buildPackages.bintools
               pkgsCross.riscv64.pkgsMusl.buildPackages.gcc
             ];
