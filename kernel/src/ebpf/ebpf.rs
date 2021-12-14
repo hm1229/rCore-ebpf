@@ -4,6 +4,7 @@ use alloc::vec::Vec;
 use core::cell::RefCell;
 use ebpf_rs::interpret::interpret;
 use lazy_static::*;
+use spin::Mutex;
 use trapframe::TrapFrame;
 
 pub struct Ebpf {
@@ -30,14 +31,29 @@ impl EbpfInner {
         let prog = self.prog.clone();
         crate::kprobes::kprobe_register(
             self.addr,
-            alloc::boxed::Box::new(move |cx: &mut TrapFrame| {
-                interpret(&prog, &HELPERS, cx as *const TrapFrame as usize as u64);
-            }),
+            // alloc::sync::Arc::new(Mutex::new(move |cx: &mut TrapFrame| {
+            //     interpret(&prog, &HELPERS, cx as *const TrapFrame as usize as u64);
+            // })),
+            // None,
+            alloc::sync::Arc::new(Mutex::new(move |cx: &mut TrapFrame| {
+                test_pre_handler(cx);
+            })),
+            Some(alloc::sync::Arc::new(Mutex::new(move |cx: &mut TrapFrame| {
+                test_post_handler(cx);
+            }))),
         )
     }
     pub fn disarm(&self) -> isize {
         crate::kprobes::kprobe_unregister(self.addr)
     }
+}
+
+pub fn test_pre_handler(cx: &mut TrapFrame){
+    println!{"pre_handler: spec:{:#x}", cx.sepc};
+}
+
+pub fn test_post_handler(cx: &mut TrapFrame){
+    println!{"post_handler: spec:{:#x}", cx.sepc};
 }
 
 impl Ebpf {
@@ -65,3 +81,4 @@ impl Ebpf {
         -1
     }
 }
+
