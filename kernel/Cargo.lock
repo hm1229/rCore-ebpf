@@ -531,6 +531,7 @@ dependencies = [
  "rcore-fs-sfs",
  "rcore-memory",
  "riscv",
+ "riscv-decode",
  "rlibc",
  "rvm",
  "smoltcp",
@@ -658,6 +659,12 @@ dependencies = [
  "log",
  "riscv-target",
 ]
+
+[[package]]
+name = "riscv-decode"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "920466101a1ec4ffac2ab9b72fa780eff62defa0ae9c4f77a07fa41dfd5450e6"
 
 [[package]]
 name = "riscv-target"

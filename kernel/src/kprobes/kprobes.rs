@@ -12,10 +12,17 @@ use core::slice::{from_raw_parts, from_raw_parts_mut};
 use spin::Mutex;
 use lazy_static::*;
 use trapframe::TrapFrame;
+use super::riscv_insn_decode::{insn_decode, InsnStatus, get_insn_length};
 
 fn sext(x: isize, size: usize) -> isize {
     let shift = core::mem::size_of::<isize>() * 8 - size;
     (x << shift) >> shift
+}
+
+#[derive(Clone)]
+pub enum ProbeType{
+    insn,
+    func,
 }
 
 pub struct Kprobes {
@@ -34,12 +41,14 @@ struct CurrentEbreaks{
 pub struct KprobesInner {
     pub addr: usize,
     pub length: usize,
-    pub slot: [u8; 4],
+    pub slot: [u8; 6],
     pub addisp: usize,
     pub func_ra: Vec<usize>,
-    pub ebreak_addr: usize,
+    pub func_ebreak_addr: usize,
+    pub insn_ebreak_addr: usize,
     pub handler: Arc<Mutex<dyn FnMut(&mut TrapFrame) + Send>>,
     pub post_handler: Option<Arc<Mutex<dyn FnMut(&mut TrapFrame) + Send>>>,
+    pub probe_type: ProbeType,
 }
 
 
@@ -84,72 +93,93 @@ impl CurrentKprobes{
 }
 
 impl KprobesInner {
-    pub fn new(addr: usize, handler: Arc<Mutex<dyn FnMut(&mut TrapFrame) + Send>>, post_handler: Option<Arc<Mutex<dyn FnMut(&mut TrapFrame) + Send>>>) -> Option<Self> {
+    pub fn new(addr: usize, handler: Arc<Mutex<dyn FnMut(&mut TrapFrame) + Send>>, post_handler: Option<Arc<Mutex<dyn FnMut(&mut TrapFrame) + Send>>>, probe_type: ProbeType) -> Option<Self> {
         let inst = unsafe { from_raw_parts(addr as *const u8, 4) };
         // read the lowest byte of the probed instruction to determine whether it is compressed
-        let length = if inst[0] & 0b11 == 0b11 { 4 } else { 2 };
+        let length = get_insn_length(addr);
         // save the probed instruction to a buffer
-        let mut slot = [0; 4];
+        let mut slot = [0; 6];
         slot[..length].copy_from_slice(&inst[..length]);
         // decode the probed instruction to retrive imm
         let mut addisp: usize = 0;
-        let mut current_ebreak = CURRENT_EBREAK.inner.borrow_mut();
-        let len = current_ebreak.len();
-        current_ebreak.push(1);
-        let ebreak_addr = current_ebreak.as_ptr() as usize + 2 * len;
+        let mut func_ebreak_addr:usize = 0;
+        let mut insn_ebreak_addr:usize = 0;
         let ebreak = unsafe { from_raw_parts(__ebreak as *const u8, 2) };
-        let mut ebreak_ptr = unsafe { from_raw_parts_mut(ebreak_addr as *mut u8, 2)};
-        ebreak_ptr.copy_from_slice(ebreak);
-        match length {
-            4 => {
-                // normal instruction
-                let inst = u32::from_le_bytes(slot[..length].try_into().unwrap());
-                if inst & 0b00000000000011111111111111111111 == 0b00000000000000010000000100010011 {
-                    // addi sp, sp, imm
-                    addisp = sext(((inst >> 20) & 0b111111111111) as isize, 12) as usize;
-                    debug!("kprobes: hook on addi sp, sp, {}", addisp as isize);
-                } else {
-                    warn!("kprobes: target instruction is not addi sp, sp, imm");
-                    return None;
+
+        match probe_type{
+            ProbeType::insn =>{
+                match insn_decode(addr){
+                    InsnStatus::Legal =>{
+                        slot[length..length+2].copy_from_slice(ebreak);
+                        let length = get_insn_length(addr);
+                        insn_ebreak_addr = slot.as_ptr() as usize + length;
+                    },
+                    _ => {warn!("kprobes: instrution is not legal"); return None},
                 }
             }
-            2 => {
-                // compressed instruction
-                let inst = u16::from_le_bytes(slot[..length].try_into().unwrap());
-                if inst & 0b1110111110000011 == 0b0110000100000001 {
-                    // c.addi16sp imm
-                    addisp = sext(
-                        ((((inst >> 12) & 0b1) << 9)
-                            + (((inst >> 6) & 0b1) << 4)
-                            + (((inst >> 5) & 0b1) << 6)
-                            + (((inst >> 3) & 0b11) << 7)
-                            + (((inst >> 2) & 0b1) << 5)) as isize,
-                        10,
-                    ) as usize;
-                    debug!("kprobes: hook on c.addi16sp {}", addisp as isize);
-                } else if inst & 0b1110111110000011 == 0b0000000100000001 {
-                    // c.addi sp, imm
-                    addisp = sext(
-                        ((((inst >> 12) & 0b1) << 5) + (((inst >> 2) & 0b11111) << 0)) as isize,
-                        6,
-                    ) as usize;
-                    debug!("kprobes: hook on c.addi sp, {}", addisp as isize);
-                } else {
-                    warn!("kprobes: target instruction is not c.addi sp, imm or c.addi16sp imm");
-                    return None;
-                }
+            ProbeType::func =>{
+                let mut current_ebreak = CURRENT_EBREAK.inner.borrow_mut();
+                let len = current_ebreak.len();
+                current_ebreak.push(1);
+                func_ebreak_addr = current_ebreak.as_ptr() as usize + 2 * len;
+                let mut ebreak_ptr = unsafe { from_raw_parts_mut(func_ebreak_addr as *mut u8, 2)};
+                ebreak_ptr.copy_from_slice(ebreak);
+                match length {
+                    4 => {
+                        // normal instruction
+                        let inst = u32::from_le_bytes(slot[..length].try_into().unwrap());
+                        if inst & 0b00000000000011111111111111111111 == 0b00000000000000010000000100010011 {
+                            // addi sp, sp, imm
+                            addisp = sext(((inst >> 20) & 0b111111111111) as isize, 12) as usize;
+                            debug!("kprobes: hook on addi sp, sp, {}", addisp as isize);
+                        } else {
+                            warn!("kprobes: target instruction is not addi sp, sp, imm");
+                            return None;
+                        }
+                    }
+                    2 => {
+                        // compressed instruction
+                        let inst = u16::from_le_bytes(slot[..length].try_into().unwrap());
+                        if inst & 0b1110111110000011 == 0b0110000100000001 {
+                            // c.addi16sp imm
+                            addisp = sext(
+                                ((((inst >> 12) & 0b1) << 9)
+                                    + (((inst >> 6) & 0b1) << 4)
+                                    + (((inst >> 5) & 0b1) << 6)
+                                    + (((inst >> 3) & 0b11) << 7)
+                                    + (((inst >> 2) & 0b1) << 5)) as isize,
+                                10,
+                            ) as usize;
+                            debug!("kprobes: hook on c.addi16sp {}", addisp as isize);
+                        } else if inst & 0b1110111110000011 == 0b0000000100000001 {
+                            // c.addi sp, imm
+                            addisp = sext(
+                                ((((inst >> 12) & 0b1) << 5) + (((inst >> 2) & 0b11111) << 0)) as isize,
+                                6,
+                            ) as usize;
+                            debug!("kprobes: hook on c.addi sp, {}", addisp as isize);
+                        } else {
+                            warn!("kprobes: target instruction is not c.addi sp, imm or c.addi16sp imm");
+                            return None;
+                        }
+                    }
+                    _ => return None,
+                };
             }
-            _ => return None,
-        };
+            _ => {warn!("wrong type!"); return None},
+        }
+            
         Some(Self {
             addr,
             length,
             slot,
             addisp,
             func_ra: Vec::new(),
-            ebreak_addr,
+            func_ebreak_addr,
+            insn_ebreak_addr,
             handler,
             post_handler,
+            probe_type,
         })
     }
     pub fn arm(&self) {
@@ -178,8 +208,9 @@ impl Kprobes {
         addr: usize,
         handler: Arc<Mutex<dyn FnMut(&mut TrapFrame) + Send>>,
         post_handler: Option<Arc<Mutex<dyn FnMut(&mut TrapFrame) + Send>>>,
+        probe_type: ProbeType,
     ) -> isize {
-        let probe = KprobesInner::new(addr, handler, post_handler);
+        let probe = KprobesInner::new(addr, handler, post_handler, probe_type);
         if let Some(probe) = probe {
             probe.arm();
             if let Some(replaced) = self.inner.borrow_mut().insert(addr, probe) {
@@ -210,24 +241,46 @@ impl Kprobes {
                 // run user defined handler
                 (probe.handler.lock())(cx);
                 // single step the probed instruction
-                cx.general.sp = cx.general.sp.wrapping_add(probe.addisp);
-                cx.sepc = cx.sepc.wrapping_add(probe.length);
-                if let Some(_) = probe.post_handler{
-                    if !current_kprobes.contains_key(&probe.ebreak_addr){
-                        current_kprobes.insert(probe.ebreak_addr, probe.clone());
+                match probe.probe_type{
+                    ProbeType::func =>{
+                        cx.general.sp = cx.general.sp.wrapping_add(probe.addisp);
+                        cx.sepc = cx.sepc.wrapping_add(probe.length);
+                        if let Some(_) = probe.post_handler{
+                            if !current_kprobes.contains_key(&probe.func_ebreak_addr){
+                                current_kprobes.insert(probe.func_ebreak_addr, probe.clone());
+                            }
+                            let current_kprobe = current_kprobes.get_mut(&probe.func_ebreak_addr).unwrap();
+                            current_kprobe.func_ra.push(cx.general.ra);
+                            cx.general.ra = probe.func_ebreak_addr as usize;
+                        }
+                    },
+                    ProbeType::insn =>{
+                        cx.sepc = probe.slot.as_ptr() as usize;
+                        probe.insn_ebreak_addr = cx.sepc + probe.length;
+                        if !current_kprobes.contains_key(&probe.insn_ebreak_addr){
+                            current_kprobes.insert(probe.insn_ebreak_addr, probe.clone());
+                        }
                     }
-                    let current_kprobe = current_kprobes.get_mut(&probe.ebreak_addr).unwrap();
-                    current_kprobe.func_ra.push(cx.general.ra);
-                    cx.general.ra = probe.ebreak_addr as usize;
                 }
+                
             }
             None => {
                 match current_kprobes.get_mut(&cx.sepc){
                     Some(probe) =>{
-                        (probe.post_handler.as_ref().unwrap().lock())(cx);
-                        cx.sepc = probe.func_ra.pop().unwrap();
-                        if probe.func_ra.len() == 0{
+                        if probe.insn_ebreak_addr == cx.sepc{
+                            if let Some(post_handler) = &probe.post_handler{
+                                (post_handler.lock())(cx);
+                            }
+                            let sepc = probe.addr + probe.length;
                             current_kprobes.remove(&cx.sepc);
+                            cx.sepc = sepc;
+                        }
+                        else{
+                            (probe.post_handler.as_ref().unwrap().lock())(cx);
+                            cx.sepc = probe.func_ra.pop().unwrap();
+                            if probe.func_ra.len() == 0{
+                                current_kprobes.remove(&cx.sepc);
+                            }
                         }
                     }
                     _ => {}

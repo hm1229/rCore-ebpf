@@ -6,6 +6,7 @@ use ebpf_rs::interpret::interpret;
 use lazy_static::*;
 use spin::Mutex;
 use trapframe::TrapFrame;
+use crate::kprobes::{kprobe_register, ProbeType};
 
 pub struct Ebpf {
     pub inner: RefCell<BTreeMap<usize, EbpfInner>>,
@@ -41,6 +42,7 @@ impl EbpfInner {
             Some(alloc::sync::Arc::new(Mutex::new(move |cx: &mut TrapFrame| {
                 test_post_handler(cx);
             }))),
+            ProbeType::insn,
         )
     }
     pub fn disarm(&self) -> isize {
