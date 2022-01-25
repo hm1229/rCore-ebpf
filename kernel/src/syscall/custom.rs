@@ -77,4 +77,9 @@ impl Syscall<'_> {
         }
         Ok(0)
     }
+
+    pub async fn sys_test_async(&mut self) -> SysResult{
+        crate::ebpf::test_async().await;
+        Ok(0)
+    }
 }

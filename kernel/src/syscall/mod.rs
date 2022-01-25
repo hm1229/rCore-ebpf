@@ -441,6 +441,7 @@ impl Syscall<'_> {
             }
             SYS_REGISTER_EBPF => self.sys_register_ebpf(args[0], args[1] as *const u8, args[2]),
             SYS_UNREGISTER_EBPF => self.sys_unregister_ebpf(args[0]),
+            SYS_TEST_ASYNC => self.sys_test_async().await,
 
             _ => {
                 let ret = match () {

@@ -285,3 +285,4 @@ pub const SYS_MAP_PCI_DEVICE: usize = 999;
 pub const SYS_GET_PADDR: usize = 998;
 pub const SYS_REGISTER_EBPF: usize = 1000;
 pub const SYS_UNREGISTER_EBPF: usize = 1001;
+pub const SYS_TEST_ASYNC: usize = 1002;

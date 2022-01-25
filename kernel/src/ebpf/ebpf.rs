@@ -7,6 +7,13 @@ use lazy_static::*;
 use spin::Mutex;
 use trapframe::TrapFrame;
 use crate::kprobes::{kprobe_register, ProbeType};
+use riscv::register::*;
+use core::{
+    future::Future,
+    mem::MaybeUninit,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 pub struct Ebpf {
     pub inner: RefCell<BTreeMap<usize, EbpfInner>>,
@@ -58,6 +65,7 @@ pub fn test_post_handler(cx: &mut TrapFrame){
     println!{"post_handler: spec:{:#x}", cx.sepc};
 }
 
+
 impl Ebpf {
     pub fn new() -> Self {
         Self {
@@ -83,4 +91,42 @@ impl Ebpf {
         -1
     }
 }
+fn get_time_ms() -> usize{
+    // println!("get_time, {}", time::read() * 62 * 1000 / 403000000);
+    time::read() * 62 * 1000 / 403000000
+}
 
+pub async fn test_async(){
+    for i in 1..=5{
+        println!("test {}", i);
+        yield_now().await;
+    }
+}
+
+pub fn yield_now() -> impl Future<Output = ()> {
+    YieldFuture{
+        time: get_time_ms(),
+    }
+}
+
+#[derive(Default)]
+struct YieldFuture {
+    time: usize,
+}
+
+impl Future for YieldFuture {
+    type Output = ();
+
+    #[inline(never)]
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        // println!("time  {}", self.time);
+        if get_time_ms() - self.time >5000 {
+            // println!("ready!!!");
+            Poll::Ready(())
+        } else {
+            // self.flag = true;
+            cx.waker().clone().wake();
+            Poll::Pending
+        }
+    }
+}

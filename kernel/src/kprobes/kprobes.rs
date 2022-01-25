@@ -293,4 +293,3 @@ impl Kprobes {
 pub fn kprobes_trap_handler(cx: &mut TrapFrame) {
     KPROBES.kprobes_trap_handler(cx);
 }
-
