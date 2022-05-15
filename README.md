@@ -1,90 +1,64 @@
-# rCore
+# Rust ebpf
 
-[![CI](https://github.com/rcore-os/rCore/workflows/CI/badge.svg?branch=master)](https://github.com/rcore-os/rCore/actions)
+## 项目总体规划
 
-Rust version of THU [uCore OS Plus](https://github.com/chyyuu/ucore_os_plus).
+- [x] kprobes
 
-Going to be the next generation teaching operating system.
+  完成内核空间指令的动态插桩，对内核函数/合法指令进行跟踪
 
-Supported architectures and boards:
+- [x] uprobes
 
-* x86_64(Tier 1): QEMU, PC (i5/i7)
-* RISCV32/64(Tier 2): QEMU, HiFive Unleashed
-* AArch64(Tier 2): QEMU, Raspberry Pi 3B+
-* MIPS32(Tier 3): QEMU, [TrivialMIPS](https://github.com/Harry-Chen/TrivialMIPS)
+  完成用户空间指令的动态插桩，对用户态程序中的函数/合法指令进行跟踪
 
-![demo](./docs/2_OSLab/os2atc/demo.png)
+- [ ] function parameter probing in probes
 
-## What's included
+  完成probes对函数参数的获取
 
-rCore has the following features:
+- [ ] async in probes
 
-* Linux compatible syscall interface: run Linux userspace programs
-* Network stack
-* Simple file system
-* Signal system
-* Async IO
-* Kernel module
+  完成probes对rust async 函数的跟踪支持
 
-## Building
+- [ ] ebpf
 
-### Environment
+  根据ebpf原理实现一个简单的ebpf
 
-* [Rust](https://www.rust-lang.org) toolchain
-* [QEMU](https://www.qemu.org) >= 4.1.0
-* [musl-based GCC toolchains](https://musl.cc/) (only for building [user programs](https://github.com/rcore-os/rcore-user))
+## 项目进展
 
-Setup on Linux or macOS:
+### 5-15
 
-```bash
-$ rustup component add rust-src llvm-tools-preview
-```
+基本完成uprobes总体事项，考虑实现probe trait将代码整合
 
-Or use Docker container:
+![](img/5-15-work.jpg)
 
-```bash
-$ docker run -it -v $PWD:$PWD -w $PWD wangrunji0408/rcore
-```
+### 1-30
 
-### How to run
+完成kprobes总体事项,可以对内核函数/合法指令进行动态跟踪
 
-```bash
-$ git clone https://github.com/rcore-os/rCore.git --recursive
-$ cd rCore/user
-$ make sfsimg PREBUILT=1 ARCH=x86_64
-$ cd ../kernel
-$ make run ARCH=x86_64 LOG=info
-```
+![](img/1-30-work.jpg)
 
-See [Makefile](kernel/Makefile) for more usages.
+## 阶段性技术报告
 
-## Maintainers
+### 5-15/5-30 中期技术报告
 
-| Module | Maintainer            |
-|--------|-----------------------|
-| x86_64 | @wangrunji0408        |
-| RISC-V  | @jiegec               |
-| AArch64 (Raspi3) | @equation314    |
-| MIPS   | @Harry_Chen @miskcoo   |
-| Memory, Process, File System | @wangrunji0408          |
-| Network with drivers | @jiegec |
-| GUI    | @equation314          |
+#### 前期调研情况：
 
-## History
+- 基础u/kprobes目前已基本完工
+- 对函数参数传递过程中间跟踪的想法是：根据传递的寄存器存储的地址以及符号表或其他资源拿取数据类型
+- 对Rust async函数的跟踪目前考虑通过抓取poll的进出来解决
+- ebpf完全体十分庞大且复杂，目前期望做一个能实现简易功能的ebpf，目前ebpf的动态插桩功能由k/uprobes完成
 
-This is a project of THU courses:
+#### 导师沟通情况：
 
-* [Operating System (2018 Spring)](http://os.cs.tsinghua.edu.cn/oscourse/OS2018spring/projects/g11)
-* [Comprehensive Experiment of Computer System (2018 Summer)](http://os.cs.tsinghua.edu.cn/oscourse/csproject2018/group05)
-* [Operating System Train (2018 Autumn)](http://os.cs.tsinghua.edu.cn/oscourse/OsTrain2018)
-* [Operating System (2019 Spring)](http://os.cs.tsinghua.edu.cn/oscourse/OS2019spring/projects)
-* [Operating System Train (2019 Autumn)](http://os.cs.tsinghua.edu.cn/oscourse/OsTrain2019)
-* [Operating System (2020 Spring)](http://os.cs.tsinghua.edu.cn/oscourse/OS2020spring/projects)
+- 与导师已经取得联系，并已获得校内和项目导师的指导
 
-[Reports](./docs) and [Dev docs](https://rucore.gitbook.io/rust-os-docs/) (in Chinese)
+#### 下一步预期规划：
 
-It's based on [BlogOS](https://github.com/phil-opp/blog_os) , a demo project in the excellent tutorial [Writing an OS in Rust (First Edition)](https://os.phil-opp.com/first-edition/).
+- 实现probe trait 将代码整合
+- 尝试理解rust编译过程，找出数据存放地址与数据类型的映射关系
+- 异步函数的跟踪
+- ebpf
 
-## License
+#### 困难/需要得到的帮助
 
-The source code is dual-licensed under MIT or the Apache License (Version 2.0).
+- 如何拿到数据地址与数据类型的映射关系，并能够根据数据地址直接输出数据。
+
