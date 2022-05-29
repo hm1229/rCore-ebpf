@@ -6,6 +6,8 @@ use log::*;
 use riscv::register::*;
 use riscv::register::{scause::Scause, sscratch, stvec};
 use trapframe::{TrapFrame, UserContext};
+// use rkprobes::kprobes_trap_handler;
+use crate::kprobes::kprobes_trap_handler;
 
 pub mod consts;
 
@@ -60,7 +62,7 @@ pub fn trap_handler_no_frame(tf: &mut TrapFrame) {
         Trap::Exception(E::InstructionPageFault) => {
             page_fault(stval, &mut tf.sepc, AccessType::execute(is_user))
         }
-        Trap::Exception(E::Breakpoint) => crate::kprobes::kprobes_trap_handler(tf),
+        Trap::Exception(E::Breakpoint) => { kprobes_trap_handler(tf) }
         _ => {
             let bits = scause.bits();
             panic!("unhandled trap {:?} ({})", scause.cause(), bits);

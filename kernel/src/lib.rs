@@ -1,4 +1,3 @@
-#![feature(asm)]
 #![feature(lang_items)]
 #![feature(naked_functions)]
 #![feature(untagged_unions)]
@@ -10,6 +9,7 @@
 #![feature(alloc_prelude)]
 #![feature(const_fn)]
 #![feature(const_in_array_repeat_expressions)]
+#![feature(asm)]
 #![deny(unused_must_use)]
 #![deny(stable_features)]
 #![deny(unused_unsafe)]
@@ -53,6 +53,7 @@ pub mod lkm;
 pub mod memory;
 pub mod net;
 pub mod process;
+pub mod kprobes;
 #[cfg(feature = "hypervisor")]
 pub mod rvm;
 pub mod shell;
@@ -62,7 +63,7 @@ pub mod syscall;
 pub mod trap;
 
 #[cfg(target_arch = "riscv64")]
-pub mod kprobes;
+
 
 #[allow(dead_code)]
 #[cfg(target_arch = "x86_64")]

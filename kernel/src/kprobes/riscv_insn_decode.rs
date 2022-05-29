@@ -42,6 +42,7 @@ pub enum Opcode {
     NOTFOUND,
 }
 
+#[derive(Debug)]
 pub enum InsnStatus {
     Illegal,
     Legal,

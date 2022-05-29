@@ -2,6 +2,7 @@ pub const Syscall: usize = 8;
 pub const InstructionPageFault: usize = 12;
 pub const LoadPageFault: usize = 13;
 pub const StorePageFault: usize = 15;
+pub const Ebreak: usize = 3;
 
 // highest bit set
 pub const IrqMin: usize = usize::MAX / 2;
@@ -37,4 +38,8 @@ pub fn is_timer_intr(trap: usize) -> bool {
 
 pub fn is_reserved_inst(trap: usize) -> bool {
     false
+}
+
+pub fn is_ebreak(trap: usize) -> bool{
+    trap == Ebreak
 }

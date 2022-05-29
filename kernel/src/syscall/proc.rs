@@ -17,6 +17,7 @@ use core::{
     task::{Context, Poll},
     time::Duration,
 };
+use crate::kprobes::uprobes_init;
 
 impl Syscall<'_> {
     /// Fork the current process. Return the child's PID.
@@ -268,7 +269,7 @@ impl Syscall<'_> {
         // Modify the TrapFrame
         self.context.set_ip(entry_addr);
         self.context.set_sp(ustack_top);
-
+        uprobes_init();
         info!("exec:END: path: {:?}", path);
         Ok(0)
     }

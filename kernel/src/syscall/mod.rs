@@ -106,6 +106,7 @@ impl Syscall<'_> {
     // This #[deny(unreachable_patterns)] checks if each match arm is defined
     // See discussion in https://github.com/oscourse-tsinghua/rcore_plus/commit/17e644e54e494835f1a49b34b80c2c4f15ed0dbe.
     #[deny(unreachable_patterns)]
+    // #[inline(never)]
     async fn syscall(&mut self, id: usize, args: [usize; 6]) -> isize {
         #[cfg(feature = "profile")]
         let begin_time = unsafe { core::arch::x86_64::_rdtsc() };
@@ -439,7 +440,7 @@ impl Syscall<'_> {
             SYS_GET_PADDR => {
                 self.sys_get_paddr(args[0] as *const u64, args[1] as *mut u64, args[2])
             }
-            SYS_REGISTER_EBPF => self.sys_register_ebpf(args[0], args[1] as *const u8, args[2]),
+            SYS_REGISTER_EBPF => self.sys_register_ebpf(args[0], args[1] as *const u8, args[2], args[3] as *const u8),
             SYS_UNREGISTER_EBPF => self.sys_unregister_ebpf(args[0]),
             SYS_TEST_ASYNC => self.sys_test_async().await,
 

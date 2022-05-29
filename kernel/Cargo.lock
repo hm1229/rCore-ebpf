@@ -532,6 +532,7 @@ dependencies = [
  "rcore-memory",
  "riscv",
  "riscv-decode",
+ "rkprobes",
  "rlibc",
  "rvm",
  "smoltcp",
@@ -674,6 +675,17 @@ checksum = "88aa938cda42a0cf62a20cfe8d139ff1af20c2e681212b5b34adb5a58333f222"
 dependencies = [
  "lazy_static",
  "regex",
+]
+
+[[package]]
+name = "rkprobes"
+version = "0.1.0"
+dependencies = [
+ "lazy_static",
+ "log",
+ "riscv-decode",
+ "spin",
+ "trapframe",
 ]
 
 [[package]]

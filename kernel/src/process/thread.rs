@@ -2,9 +2,7 @@ use super::{
     abi::{self, ProcInitInfo},
     add_to_process_table, Pid, Process, PROCESSORS,
 };
-use crate::arch::interrupt::consts::{
-    is_intr, is_page_fault, is_reserved_inst, is_syscall, is_timer_intr,
-};
+use crate::arch::interrupt::consts::{is_ebreak, is_intr, is_page_fault, is_reserved_inst, is_syscall, is_timer_intr};
 use crate::arch::interrupt::{get_trap_num, handle_reserved_inst};
 use crate::arch::{
     cpu,
@@ -50,6 +48,8 @@ use xmas_elf::{
     program::{Flags, SegmentData, Type},
     ElfFile,
 };
+use crate::kprobes::uprobes_trap_handler;
+// use rkprobes::uprobes_trap_handler;
 
 /// Tid type
 pub type Tid = usize;
@@ -521,7 +521,7 @@ pub fn spawn(thread: Arc<Thread>) {
                             is_execute_page_fault, is_read_page_fault, is_write_page_fault,
                         };
                         use crate::arch::interrupt::handle_user_page_fault_ext;
-                        let access_type = match trap_num {
+                    let access_type = match trap_num {
                             _ if is_execute_page_fault(trap_num) => {
                                 crate::memory::AccessType::execute(true)
                             }
@@ -565,7 +565,11 @@ pub fn spawn(thread: Arc<Thread>) {
                         );
                     }
                 }
+                _ if is_ebreak(trap_num) => {
+                    uprobes_trap_handler(cx);
+                }
                 _ => {
+                    // println!("{:x?}", cx);
                     panic!(
                         "unhandled trap in thread {} trap {:#x} {:x?}",
                         thread.tid, trap_num, cx

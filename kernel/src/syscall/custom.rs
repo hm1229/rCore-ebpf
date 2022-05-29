@@ -58,14 +58,14 @@ impl Syscall<'_> {
         Ok(0)
     }
 
-    pub fn sys_register_ebpf(&mut self, addr: usize, base: *const u8, len: usize) -> SysResult {
-        let mut proc = self.process();
+    pub fn sys_register_ebpf(&mut self, addr: usize, base: *const u8, len: usize, path: *const u8) -> SysResult {
         let slice = unsafe { self.vm().check_read_array(base, len)? };
+        let path = check_and_clone_cstr(path)?;
         let prog = slice
             .chunks_exact(8)
             .map(|x| u64::from_le_bytes(x.try_into().unwrap()))
             .collect::<alloc::vec::Vec<u64>>();
-        if crate::ebpf::ebpf_register(addr, prog) != 0 {
+        if crate::ebpf::ebpf_register(addr, prog, path) != 0 {
             return Err(SysError::EINVAL);
         }
         Ok(0)
@@ -79,7 +79,9 @@ impl Syscall<'_> {
     }
 
     pub async fn sys_test_async(&mut self) -> SysResult{
+        println!("before");
         crate::ebpf::test_async().await;
+        println!("after");
         Ok(0)
     }
 }

@@ -1,12 +1,18 @@
 use crate::ebpf::helper::HELPERS;
 use alloc::collections::btree_map::BTreeMap;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use num::integer;
+use num_traits::int;
 use core::cell::RefCell;
 use ebpf_rs::interpret::interpret;
 use lazy_static::*;
 use spin::Mutex;
-use trapframe::TrapFrame;
-use crate::kprobes::{kprobe_register, ProbeType};
+use trapframe::{TrapFrame, UserContext};
+// use rkprobes::{kprobe_register, ProbeType};
+use crate::kprobes::{ProbeType, uprobe_register};
+use crate::kprobes::kprobe_register;
+// use rkprobes::kprobe_register;
 use riscv::register::*;
 use core::{
     future::Future,
@@ -14,6 +20,8 @@ use core::{
     pin::Pin,
     task::{Context, Poll},
 };
+use executor;
+use riscv::register::mcause::Trap;
 
 pub struct Ebpf {
     pub inner: RefCell<BTreeMap<usize, EbpfInner>>,
@@ -35,35 +43,55 @@ impl EbpfInner {
     pub fn new(addr: usize, prog: Vec<u64>) -> Self {
         Self { addr, prog }
     }
-    pub fn arm(&self) -> isize {
+    pub fn arm(&self, path: String) -> isize {
         let prog = self.prog.clone();
-        crate::kprobes::kprobe_register(
+        uprobe_register(
+            path,
             self.addr,
-            // alloc::sync::Arc::new(Mutex::new(move |cx: &mut TrapFrame| {
-            //     interpret(&prog, &HELPERS, cx as *const TrapFrame as usize as u64);
-            // })),
-            // None,
-            alloc::sync::Arc::new(Mutex::new(move |cx: &mut TrapFrame| {
+            alloc::sync::Arc::new(Mutex::new(move |cx: &mut UserContext| {
                 test_pre_handler(cx);
             })),
-            Some(alloc::sync::Arc::new(Mutex::new(move |cx: &mut TrapFrame| {
+            Some(alloc::sync::Arc::new(Mutex::new(move |cx: &mut UserContext| {
                 test_post_handler(cx);
             }))),
-            ProbeType::insn,
+            // None,
+            ProbeType::SyncFunc,
         )
+        // kprobe_register(
+        //     self.addr,
+        //     alloc::sync::Arc::new(Mutex::new(move |cx: &mut TrapFrame| {
+        //         test_kernel_pre_handler(cx);
+        //     })),
+        //     Some(alloc::sync::Arc::new(Mutex::new(move |cx: &mut TrapFrame| {
+        //         test_kernel_post_handler(cx);
+        //     }))),
+        //     // None,
+        //     // rkprobes::ProbeType::Func,
+        //     ProbeType::SyncFunc,
+        // )
     }
     pub fn disarm(&self) -> isize {
-        crate::kprobes::kprobe_unregister(self.addr)
+        // kprobe_unregister(self.addr)
+        1
     }
 }
 
-pub fn test_pre_handler(cx: &mut TrapFrame){
+pub fn test_pre_handler(cx: &mut UserContext){
     println!{"pre_handler: spec:{:#x}", cx.sepc};
 }
 
-pub fn test_post_handler(cx: &mut TrapFrame){
+pub fn test_post_handler(cx: &mut UserContext){
     println!{"post_handler: spec:{:#x}", cx.sepc};
 }
+
+pub fn test_kernel_pre_handler(cx: &mut TrapFrame){
+    println!{"pre_handler: spec:{:#x}", cx.sepc};
+}
+
+pub fn test_kernel_post_handler(cx: &mut TrapFrame){
+    println!{"post_handler: spec:{:#x}", cx.sepc};
+}
+
 
 
 impl Ebpf {
@@ -72,9 +100,9 @@ impl Ebpf {
             inner: RefCell::new(BTreeMap::new()),
         }
     }
-    pub fn register(&self, addr: usize, prog: Vec<u64>) -> isize {
+    pub fn register(&self, addr: usize, prog: Vec<u64>, path: String) -> isize {
         let ebpf = EbpfInner::new(addr, prog);
-        let ret = ebpf.arm();
+        let ret = ebpf.arm(path);
         if ret != 0 {
             return ret;
         }
@@ -96,14 +124,33 @@ fn get_time_ms() -> usize{
     time::read() * 62 * 1000 / 403000000
 }
 
+// before function: 
+#[inline(never)]
 pub async fn test_async(){
+    executor::spawn(test1_async());
+    println!("in_async");
+    test2_async().await;
+}
+// after function: 
+
+
+async fn test1_async(){
     for i in 1..=5{
-        println!("test {}", i);
-        yield_now().await;
+        let buffer: u64 = yield_now().await;
+        println!("test1 {}---------{}", i, buffer);
+        // yield_now().await;
     }
 }
 
-pub fn yield_now() -> impl Future<Output = ()> {
+async fn test2_async(){
+    for i in 1..=5{
+        let buffer: u64 = yield_now().await;
+        println!("test2 {}---------{}", i, buffer);
+        // yield_now().await;
+    }
+}
+
+pub fn yield_now() -> impl Future<Output = u64> {
     YieldFuture{
         time: get_time_ms(),
     }
@@ -115,14 +162,14 @@ struct YieldFuture {
 }
 
 impl Future for YieldFuture {
-    type Output = ();
+    type Output = u64;
 
     #[inline(never)]
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         // println!("time  {}", self.time);
-        if get_time_ms() - self.time >5000 {
+        if get_time_ms() - self.time > 5000 {
             // println!("ready!!!");
-            Poll::Ready(())
+            Poll::Ready(10)
         } else {
             // self.flag = true;
             cx.waker().clone().wake();
