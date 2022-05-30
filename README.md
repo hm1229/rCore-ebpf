@@ -1,5 +1,7 @@
 # Rust ebpf
 
+项目技术报告：[Rust eBPF](http://hm1229.top/rust_ebpf_book/book/index.html)
+
 ## 项目总体规划
 
 - [x] kprobes
@@ -38,7 +40,7 @@
 
 ## 阶段性技术报告
 
-### 5-15/5-30 中期技术报告
+### 5-15
 
 #### 前期调研情况：
 
