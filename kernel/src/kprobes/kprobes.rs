@@ -9,7 +9,7 @@ use spin::Mutex;
 use lazy_static::*;
 use trapframe::TrapFrame;
 use super::probes::{get_sp, ProbeType};
-use super::riscv_insn_decode::{insn_decode, InsnStatus, get_insn_length};
+use riscv_insn_decode::{insn_decode, InsnStatus, get_insn_length};
 
 fn sext(x: isize, size: usize) -> isize {
     let shift = core::mem::size_of::<isize>() * 8 - size;
@@ -113,7 +113,7 @@ impl KprobesInner {
                         let length = get_insn_length(addr);
                         insn_ebreak_addr = slot.as_ptr() as usize + length;
                     },
-                    _ => {warn!("kprobes: instrution is not legal"); return None},
+                    _ => {warn!("kprobes: instruction is not legal"); return None},
                 }
             }
             ProbeType::SyncFunc =>{
@@ -127,7 +127,7 @@ impl KprobesInner {
                     Some(sp) => addisp = sp as usize,
                     None => {error!("sp not found!"); return None}
                 }
-                println!("addisp {}", addisp as isize);
+                // println!("addisp {}", addisp as isize);
             }
             ProbeType::AsyncFunc =>{
                 error!("not implemented yet!");
@@ -253,7 +253,6 @@ impl Kprobes {
                             if probe.func_ra.len() == 0{
                                 current_kprobes.remove(&cx.sepc);
                             }
-                            println!("get sepc??{}", sepc);
                             cx.sepc = sepc;
                         }
                     }

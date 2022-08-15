@@ -531,8 +531,7 @@ dependencies = [
  "rcore-fs-sfs",
  "rcore-memory",
  "riscv",
- "riscv-decode",
- "rkprobes",
+ "riscv_insn_decode",
  "rlibc",
  "rvm",
  "smoltcp",
@@ -678,14 +677,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "rkprobes"
+name = "riscv_insn_decode"
 version = "0.1.0"
+source = "git+https://github.com/hm1229/riscv_insn_decode?rev=0b954c9#0b954c97d5c7cea164a5f9360fadf50cc8fd81a7"
 dependencies = [
- "lazy_static",
- "log",
  "riscv-decode",
- "spin",
- "trapframe",
 ]
 
 [[package]]

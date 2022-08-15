@@ -40,6 +40,7 @@ mod proc;
 mod signal;
 mod time;
 mod user;
+mod ebpf;
 
 #[cfg(feature = "profile")]
 use crate::sync::SpinNoIrqLock as Mutex;
@@ -440,7 +441,7 @@ impl Syscall<'_> {
             SYS_GET_PADDR => {
                 self.sys_get_paddr(args[0] as *const u64, args[1] as *mut u64, args[2])
             }
-            SYS_REGISTER_EBPF => self.sys_register_ebpf(args[0], args[1] as *const u8, args[2], args[3] as *const u8),
+            SYS_REGISTER_EBPF => self.sys_register_ebpf(args[0], args[1] as *const u8, args[2], args[3], args[4] as *const u8),
             SYS_UNREGISTER_EBPF => self.sys_unregister_ebpf(args[0]),
             SYS_TEST_ASYNC => self.sys_test_async().await,
 

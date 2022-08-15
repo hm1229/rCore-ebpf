@@ -13,7 +13,7 @@ use lazy_static::*;
 use rcore_memory::memory_set::MemoryAttr;
 use rcore_memory::memory_set::handler::{Delay, ByFrame};
 use rcore_memory::paging::PageTable;
-use super::riscv_insn_decode::{insn_decode, InsnStatus, get_insn_length};
+use riscv_insn_decode::{insn_decode, InsnStatus, get_insn_length};
 use super::probes::{get_sp, ProbeType};
 use crate::memory::{AccessType, handle_page_fault_ext, GlobalFrameAlloc};
 use crate::process::current_thread;

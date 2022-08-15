@@ -12,4 +12,3 @@ pub extern "C" fn init_module(){
     v.push(20);
     hello::hello_again();
 }
-

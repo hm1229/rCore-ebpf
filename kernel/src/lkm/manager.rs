@@ -30,6 +30,7 @@ global_asm!(include_str!("symbol_table.asm"));
 pub struct ModuleManager {
     stub_symbols: BTreeMap<String, ModuleSymbol>,
     loaded_modules: Vec<Box<LoadedModule>>,
+    kernel_symbols: Vec<(String, usize)>,
 }
 
 lazy_static! {
@@ -89,7 +90,7 @@ impl ModuleManager {
         let zipped_symbols = unsafe {
             core::slice::from_raw_parts(symbol_table_start as *const u8, symbol_table_len)
         }
-        .to_vec();
+            .to_vec();
 
         let real_symbols = zipped_symbols
             .decode(&mut GZipDecoder::new())
@@ -104,15 +105,23 @@ impl ModuleManager {
             let mut words = l.split_whitespace();
             let address = words.next().unwrap();
             let _stype = words.next().unwrap();
-            let name = words.next().unwrap();
+            // Current compiler is too old and it don't have SplitWhitespace::as_str
+            // We have to use some workaround
+            // let name = words.as_str();
+            let remaining: Vec<_> = words.collect();
+            let name: &str = &remaining.join(" ");
             // Simply add the symbol into stub.
+            let addr = usize::from_str_radix(address, 16).unwrap();
             self.stub_symbols.insert(
                 String::from(name),
                 ModuleSymbol {
                     name: String::from(name),
-                    loc: usize::from_str_radix(address, 16).unwrap(),
+                    loc: addr,
                 },
             );
+
+            // Extra kernel symbols. (sorted by addresses)
+            self.kernel_symbols.push((String::from(name), addr));
         }
     }
     pub fn resolve_symbol(&self, symbol: &str) -> Option<usize> {
@@ -319,7 +328,7 @@ impl ModuleManager {
                 state: Ready,
             });
             info!(
-                "[LKM] module load done at {}, now need to do the relocation job.",
+                "[LKM] module load done at {:#x}, now need to do the relocation job.",
                 base
             );
             // We only search two tables for relocation info: the symbols from itself, and the symbols from the global exported symbols.
@@ -405,9 +414,9 @@ impl ModuleManager {
                     for sym in dynsym_table.iter() {
                         if exported
                             == sym.get_name(&elf).map_err(|_| {
-                                error!("[LKM] load symbol name error!");
-                                ENOEXEC
-                            })?
+                            error!("[LKM] load symbol name error!");
+                            ENOEXEC
+                        })?
                         {
                             let exported_symbol = ModuleSymbol {
                                 name: exported.clone(),
@@ -425,7 +434,7 @@ impl ModuleManager {
                 // Now everything is done, and the entry can be safely plugged into the vector.
                 self.loaded_modules.push(loaded_minfo);
                 if lkm_entry > 0 {
-                    info!("[LKM] calling init_module at {}", lkm_entry);
+                    info!("[LKM] calling init_module at {:#x}", lkm_entry);
                     unsafe {
                         LKM_MANAGER.force_unlock();
                         let init_module: fn() = transmute(lkm_entry);
@@ -606,11 +615,15 @@ impl ModuleManager {
         let mut kmm = ModuleManager {
             stub_symbols: ModuleManager::init_stub_symbols(),
             loaded_modules: Vec::new(),
+            kernel_symbols: Vec::new(),
         };
         kmm.load_kernel_symbols_from_elf();
 
         //let lkmm: Mutex<Option<ModuleManager>>=Mutex::new(None);
         LKM_MANAGER.lock().replace(kmm);
         info!("[LKM] Loadable Kernel Module Manager loaded!");
+    }
+    pub fn get_kernel_symbols(&self) -> &Vec<(String, usize)> {
+        return &self.kernel_symbols;
     }
 }

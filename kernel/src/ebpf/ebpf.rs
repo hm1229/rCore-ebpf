@@ -9,10 +9,7 @@ use ebpf_rs::interpret::interpret;
 use lazy_static::*;
 use spin::Mutex;
 use trapframe::{TrapFrame, UserContext};
-// use rkprobes::{kprobe_register, ProbeType};
-use crate::kprobes::{ProbeType, uprobe_register};
-use crate::kprobes::kprobe_register;
-// use rkprobes::kprobe_register;
+use crate::kprobes::{ProbeType, uprobe_register, kprobe_register, kprobe_unregister,ProbePlace};
 use riscv::register::*;
 use core::{
     future::Future,
@@ -20,6 +17,7 @@ use core::{
     pin::Pin,
     task::{Context, Poll},
 };
+use crate::lkm::manager::ModuleManager;
 use executor;
 use riscv::register::mcause::Trap;
 
@@ -39,40 +37,74 @@ lazy_static! {
     pub static ref EBPF: Ebpf = Ebpf::new();
 }
 
+fn resolve_symbol(symbol: &str) -> Option<usize> {
+    ModuleManager::with(|mm| mm.resolve_symbol(symbol))
+}
+
 impl EbpfInner {
     pub fn new(addr: usize, prog: Vec<u64>) -> Self {
         Self { addr, prog }
     }
-    pub fn arm(&self, path: String) -> isize {
+    pub fn arm(&self, path: String, pp: ProbePlace) -> isize {
         let prog = self.prog.clone();
-        uprobe_register(
-            path,
-            self.addr,
-            alloc::sync::Arc::new(Mutex::new(move |cx: &mut UserContext| {
-                test_pre_handler(cx);
-            })),
-            Some(alloc::sync::Arc::new(Mutex::new(move |cx: &mut UserContext| {
-                test_post_handler(cx);
-            }))),
-            // None,
-            ProbeType::SyncFunc,
-        )
-        // kprobe_register(
-        //     self.addr,
-        //     alloc::sync::Arc::new(Mutex::new(move |cx: &mut TrapFrame| {
-        //         test_kernel_pre_handler(cx);
-        //     })),
-        //     Some(alloc::sync::Arc::new(Mutex::new(move |cx: &mut TrapFrame| {
-        //         test_kernel_post_handler(cx);
-        //     }))),
-        //     // None,
-        //     // rkprobes::ProbeType::Func,
-        //     ProbeType::SyncFunc,
-        // )
+        match pp {
+            ProbePlace::Kernel(ProbeType::Insn) => {
+                kprobe_register(
+                    self.addr,
+                    alloc::sync::Arc::new(Mutex::new(move |cx: &mut TrapFrame| {
+                        interpret(&prog, &HELPERS, cx as *const TrapFrame as usize as u64);
+                    })),
+                    Some(alloc::sync::Arc::new(Mutex::new(move |cx: &mut TrapFrame| {
+                        test_kernel_post_handler(cx);
+                    }))),
+                    ProbeType::Insn
+                )
+            }
+            ProbePlace::Kernel(ProbeType::SyncFunc) => {
+                kprobe_register(
+                    self.addr,
+                    alloc::sync::Arc::new(Mutex::new(move |cx: &mut TrapFrame| {
+                        interpret(&prog, &HELPERS, cx as *const TrapFrame as usize as u64);
+                    })),
+                    Some(alloc::sync::Arc::new(Mutex::new(move |cx: &mut TrapFrame| {
+                        test_kernel_post_handler(cx);
+                    }))),
+                    ProbeType::SyncFunc
+                )
+            }
+            ProbePlace::User(ProbeType::Insn) => {
+                uprobe_register(
+                    path,
+                    self.addr,
+                    alloc::sync::Arc::new(Mutex::new(move |cx: &mut UserContext| {
+                        interpret(&prog, &HELPERS, cx as *const UserContext as usize as u64);
+                    })),
+                    Some(alloc::sync::Arc::new(Mutex::new(move |cx: &mut UserContext| {
+                        test_post_handler(cx);
+                    }))),
+                    ProbeType::Insn
+                )
+            }
+            ProbePlace::User(ProbeType::SyncFunc) => {
+                uprobe_register(
+                    path,
+                    self.addr,
+                    alloc::sync::Arc::new(Mutex::new(move |cx: &mut UserContext| {
+                        interpret(&prog, &HELPERS, cx as *const UserContext as usize as u64);
+                    })),
+                    Some(alloc::sync::Arc::new(Mutex::new(move |cx: &mut UserContext| {
+                        test_post_handler(cx);
+                    }))),
+                    ProbeType::SyncFunc
+                )
+            }
+            _ => {
+                -1
+            }
+        }
     }
     pub fn disarm(&self) -> isize {
-        // kprobe_unregister(self.addr)
-        1
+        kprobe_unregister(self.addr)
     }
 }
 
@@ -100,9 +132,9 @@ impl Ebpf {
             inner: RefCell::new(BTreeMap::new()),
         }
     }
-    pub fn register(&self, addr: usize, prog: Vec<u64>, path: String) -> isize {
+    pub fn register(&self, addr: usize, prog: Vec<u64>, path: String, pp: ProbePlace) -> isize {
         let ebpf = EbpfInner::new(addr, prog);
-        let ret = ebpf.arm(path);
+        let ret = ebpf.arm(path, pp);
         if ret != 0 {
             return ret;
         }
@@ -119,6 +151,7 @@ impl Ebpf {
         -1
     }
 }
+
 fn get_time_ms() -> usize{
     // println!("get_time, {}", time::read() * 62 * 1000 / 403000000);
     time::read() * 62 * 1000 / 403000000

@@ -45,6 +45,6 @@ struct TrapFrame {
 
 int prog(struct TrapFrame* cx) {
     char fmt[] = "from ebpf: the probed address is {}";
-    bpf_trace_printk(fmt, 37, cx->general.a1, 0, 0);
+    bpf_trace_printk(fmt, 37, cx->sepc, 0, 0);
     return 0;
 }

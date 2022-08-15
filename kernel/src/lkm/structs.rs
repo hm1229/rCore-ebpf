@@ -3,7 +3,7 @@ use crate::sync::SpinLock as Mutex;
 use alloc::string::*;
 use alloc::sync::Arc;
 use alloc::vec::*;
-
+#[derive(Debug, Clone)]
 pub struct ModuleSymbol {
     pub name: String,
     pub loc: usize,

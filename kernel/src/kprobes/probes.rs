@@ -1,13 +1,16 @@
 use alloc::boxed::Box;
 use alloc::collections::btree_map::BTreeMap;
+use alloc::string::String;
 use core::cell::RefCell;
 use spin::Mutex;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::convert::TryInto;
 use core::slice::{from_raw_parts, from_raw_parts_mut};
-use super::riscv_insn_decode::get_insn_length;
+use riscv_insn_decode::get_insn_length;
 use trapframe::UserContext;
+use super::kprobes::kprobe_register;
+use super::uprobes::uprobe_register;
 
 pub fn get_sp(addr: usize) -> Option<usize>{
     let slot = unsafe { from_raw_parts(addr as *const u8, 4) };
@@ -70,8 +73,13 @@ fn sext(x: isize, size: usize) -> isize {
     (x << shift) >> shift
 }
 
-/// implemented by Adria
-#[derive(Clone)]
+#[derive(Clone, Debug)]
+pub enum ProbePlace {
+    Kernel(ProbeType),
+    User(ProbeType),
+}
+
+#[derive(Clone, Debug)]
 pub enum ProbeType {
     Insn,
     SyncFunc,

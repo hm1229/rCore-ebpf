@@ -80,7 +80,6 @@ xmas-elf = "0.7"
 rvm = { git = "https://github.com/rcore-riscv-hypervisor-dev/RVM", rev = "2867e78", optional = true }
 ebpf-rs = { git = "https://github.com/NickCao/ebpf-rs", rev = "a7d53c0245344e9dad954a53077b0bcb16351442" }
 #rkprobes = { git = "https://github.com/hm1229/rkprobes", rev = "df1c15c" }
-rkprobes = {path = "../rkprobes"}
 dyn-fmt = { version = "0.3.0", default-features = false }
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
@@ -94,7 +93,7 @@ x86_64 = "0.11"
 
 [target.'cfg(any(target_arch = "riscv32", target_arch = "riscv64"))'.dependencies]
 riscv = { git = "https://github.com/rcore-riscv-hypervisor-dev/riscv" , rev = "3f5efb1", features = ["inline-asm", "hypervisor"] }
-riscv-decode = "0.2.0"
+riscv_insn_decode = {git = "https://github.com/hm1229/riscv_insn_decode", rev = "0b954c9"}
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 aarch64 = { git = "https://github.com/rcore-os/aarch64", version = "3.0.1" }
