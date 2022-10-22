@@ -29,7 +29,8 @@ unsafe fn bpf_trace_printk(fmt: u64, fmt_size: u64, p1: u64, p2: u64, p3: u64) -
     let fmt = core::slice::from_raw_parts(fmt as *const u8, fmt_size as u32 as usize);
     println!(
         "{}",
-        dyn_fmt::Arguments::new(core::str::from_utf8_unchecked(fmt), &[format!("{:#x}", p1), format!("{}", p2), format!("{}", p3)])
+        dyn_fmt::Arguments::new(core::str::from_utf8_unchecked(fmt), &[format!("{:#x}", p1),
+            format!("{}", p2), format!("{}", p3)])
     );
     0
 }
